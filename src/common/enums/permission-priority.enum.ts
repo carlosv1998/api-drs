@@ -1,0 +1,6 @@
+export enum PERMISSION_PRIORITY {
+  USER = 1,
+  MODERATOR = 2,
+  ADMIN = 3,
+  SUPER_ADMIN = 4,
+}

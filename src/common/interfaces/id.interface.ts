@@ -1,0 +1,1 @@
+export type APP_ID = string;

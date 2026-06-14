@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  firstName String
+  lastName  String
+  email     String   @unique
+  rut       String   @unique
+  password  String
+  emailVerified Boolean @default(false)
+  avatarUrl     String?
+  signatureUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Token {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  type      String
+  value     String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("tokens")
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String   @db.ObjectId
+  deviceType   String
+  deviceName   String?
+  userAgent    String?
+  ipAddress    String?
+  lastActiveAt DateTime @default(now())
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@map("sessions")
+}
+
+model Scope {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String   @unique
+  description String?
+  module      String
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("scopes")
+}
+
+model Role {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String   @unique
+  priority    Int
+  description String?
+  scopeList   String[] @db.ObjectId
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("roles")
+}
+
+model Document {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdBy        String   @db.ObjectId
+  type             String
+  description      String?
+  url              String?
+  status           String   @default("CREADO")
+  size             Int?
+  mimetype         String?
+  data             Json?
+  signatures       Json?
+  pendingSignerIds String[] @db.ObjectId
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("documents")
+}
+
+model Permission {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String   @unique @db.ObjectId
+  roles         String[] @db.ObjectId
+  allowedScopes String[] @db.ObjectId
+  deniedScopes  String[] @db.ObjectId
+  assignedById  String   @db.ObjectId
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("permissions")
+}
