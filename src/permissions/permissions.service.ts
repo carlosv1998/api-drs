@@ -5,6 +5,7 @@ import { RolesService } from './roles/roles.service';
 import { ScopesService } from './scopes/scopes.service';
 import { SCOPE_NAME } from 'src/common/enums/scopes.enum';
 import { CreateOrUpdatePermissionsDto } from './dtos/create-or-update-permissions.dto';
+import { UsersService } from 'src/users/users.service';
 
 @Injectable()
 export class PermissionsService {
@@ -12,6 +13,7 @@ export class PermissionsService {
     private readonly prisma: PrismaService,
     private readonly rolesService: RolesService,
     private readonly scopesService: ScopesService,
+    private readonly usersService: UsersService,
   ) {}
 
   async createOrUpdate(
@@ -69,6 +71,17 @@ export class PermissionsService {
     if (roles.length === 0) return 0;
 
     return Math.max(...roles.map((r) => r.priority));
+  }
+
+  async findUserWithPermissions(userId: string) {
+    const [user, permissions] = await Promise.all([
+      this.usersService.findById(userId),
+      this.findExpandedByUserId(userId),
+    ]);
+
+    const { ...profile } = user;
+
+    return { user: profile, permissions };
   }
 
   findByUserId(userId: string) {

@@ -20,7 +20,14 @@ export class RolesService {
   }
 
   findAll() {
-    return this.prisma.role.findMany({ orderBy: { name: 'asc' } });
+    return this.prisma.role.findMany({ orderBy: { priority: 'asc' } });
+  }
+
+  findPublic() {
+    return this.prisma.role.findMany({
+      where: { priority: { lt: 4 }, enabled: true },
+      orderBy: { priority: 'asc' },
+    });
   }
 
   findById(id: string) {

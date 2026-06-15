@@ -13,6 +13,8 @@ import { UpdatePermissionDto } from './dtos/update-permission.dto';
 import { ValidateScopesDto } from './dtos/validate-scopes.dto';
 import { GetUser } from 'src/main/decorators/get-user.decorator';
 import { CreateOrUpdatePermissionsDto } from './dtos/create-or-update-permissions.dto';
+import { RequirePermissions } from './decorators/require-permissions.decorator';
+import { SCOPE_NAME } from 'src/common/enums/scopes.enum';
 
 @Controller('permissions')
 export class PermissionsController {
@@ -20,6 +22,7 @@ export class PermissionsController {
 
   constructor(private readonly permissionsService: PermissionsService) {}
 
+  @RequirePermissions([SCOPE_NAME.PERMISSIONS_UPDATE])
   @Patch()
   patch(
     @Body() data: CreateOrUpdatePermissionsDto,
@@ -35,6 +38,12 @@ export class PermissionsController {
     return this.permissionsService.findExpandedByUserId(userId);
   }
 
+  @Get('me/scopes')
+  getMyEffectiveScopes(@GetUser('id') userId: string) {
+    this.logger.debug('Received request to get effective scopes');
+    return this.permissionsService.getEffectiveScopes(userId);
+  }
+
   @Post('validate')
   async validate(
     @GetUser('id') userId: string,
@@ -43,6 +52,12 @@ export class PermissionsController {
     this.logger.debug(`Received request to validate scopes for user ${userId}`);
     const allowed = await this.permissionsService.hasAnyScope(userId, scopes);
     return { allowed };
+  }
+
+  @Get('user/:userId')
+  findUserWithPermissions(@Param('userId') userId: string) {
+    this.logger.debug(`Received request to get profile + permissions for user ${userId}`);
+    return this.permissionsService.findUserWithPermissions(userId);
   }
 
   @Get(':userId')

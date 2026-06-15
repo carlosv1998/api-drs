@@ -30,6 +30,12 @@ export class RolesController {
     return this.rolesService.findAll();
   }
 
+  @Get('public')
+  findPublic() {
+    this.logger.debug('Received request to list public roles');
+    return this.rolesService.findPublic();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     this.logger.debug(`Received request to get role ${id}`);
