@@ -5,12 +5,11 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { PDFDocument } from 'pdf-lib';
-import puppeteer from 'puppeteer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GcpStorageService } from '../storage/gcp-storage.service';
-import { ArtData } from './templates/ART/art-pdf.types';
 import { buildArtFileName, fillArt } from './templates/ART/art-pdf.template';
+import { CreateArtDtoV2 } from '../dtos/art-data-v2.dto';
 
 @Injectable()
 export class PdfService implements OnModuleInit {
@@ -29,7 +28,7 @@ export class PdfService implements OnModuleInit {
     this.logger.log('PDF templates loaded');
   }
 
-  async generateArt(art: ArtData, userId: string): Promise<{ url: string; size: number }> {
+  async generateArt(art: CreateArtDtoV2, userId: string): Promise<{ url: string; size: number }> {
     try {
       const pdfDoc = await PDFDocument.load(this.artTemplateBytes);
       await fillArt(pdfDoc, art);

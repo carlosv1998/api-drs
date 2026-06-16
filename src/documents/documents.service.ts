@@ -20,8 +20,9 @@ import { ArtSignatures } from './pdf/templates/ART/art-signatures.types';
 import { calculateArtStatus } from './utils/art-status.util';
 import { Prisma } from '@prisma/client';
 import { envs } from 'src/config/envs';
+import { CreateArtDtoV2 } from './dtos/art-data-v2.dto';
+import { IDocumentArtData } from './interfaces/document-art-data.interface';
 
-// Prisma type extended with new Json fields (until `prisma generate` picks them up)
 type DocumentRow = Awaited<ReturnType<PrismaService['document']['findUniqueOrThrow']>> & {
   data: unknown;
   signatures: unknown;
@@ -35,8 +36,6 @@ export class DocumentsService {
     private readonly storageService: GcpStorageService,
     private readonly pdfService: PdfService,
   ) {}
-
-  // ── Generic upload ────────────────────────────────────────────
 
   async uploadFile(file: Express.Multer.File, userId: string, data: UploadDocumentDto) {
     const filename = `documents/${userId}/${Date.now()}-${file.originalname}`;
@@ -55,94 +54,38 @@ export class DocumentsService {
     });
   }
 
-  // ── ART ───────────────────────────────────────────────────────
-
-  async createArt(userId: string, dto: CreateArtDto) {
-    const signersList = dto.signers ?? [];
-
-    const liderData = signersList.find((s) => s.role === 'lider');
-    const participantesData = signersList.filter((s) => s.role === 'participante');
-
-    const signatures: ArtSignatures = {
-      lider: liderData
-        ? {
-            userId: liderData.userId,
-            nombre: liderData.nombre,
-            cargo: liderData.cargo,
-            verificoCondiciones: null,
-            hasSigned: false,
-            signedAt: null,
-            signatureUrl: null,
-          }
-        : null,
-      participantes: participantesData.map((p) => ({
-        userId: p.userId,
-        nombre: p.nombre,
-        cargo: p.cargo,
-        enCondiciones: null,
-        hasSigned: false,
-        signedAt: null,
-        signatureUrl: null,
-      })),
-    };
-
-    const pendingSignerIds = signersList.map((s) => s.userId);
-    const artStatus = calculateArtStatus(dto.data as Partial<ArtData>);
-    const status = pendingSignerIds.length > 0 ? DOCUMENT_STATUS.PENDIENTE_FIRMAS : artStatus;
-
-    // Solo generar PDF si los datos mínimos están completos
+  async createArt(userId: string, artData: CreateArtDtoV2) {
     let url: string | null = null;
     let size: number | null = null;
-    if (artStatus !== DOCUMENT_STATUS.INCOMPLETO) {
-      const pdf = await this.pdfService.generateArt(dto.data as ArtData, userId);
-      url = pdf.url;
-      size = pdf.size;
+    const pdf = await this.pdfService.generateArt(artData, userId);
+    url = pdf.url;
+    size = pdf.size;
+
+    const finalArtData: IDocumentArtData = {
+      ...artData,
+      condicionesFisicas: {
+        ...artData.condicionesFisicas,
+        liderFirma: Boolean(artData.condicionesFisicas.liderFirma),
+      },
+      participantes: artData.participantes.map((p) => ({
+        ...p,
+        participanteFirma: Boolean(p.participanteFirma),
+      }))
     }
 
     const doc = await this.prisma.document.create({
       data: {
         createdBy: userId,
         type: DOCUMENT_TYPE.ART,
-        status,
+        status: DOCUMENT_STATUS.COMPLETADO,
         url,
         size,
         mimetype: url ? DOCUMENT_MIMETYPE.PDF : null,
-        data: dto.data as unknown as Prisma.InputJsonValue,
-        signatures: signatures as unknown as Prisma.InputJsonValue,
-        pendingSignerIds,
+        data: finalArtData as unknown as Prisma.InputJsonValue,
       },
     });
 
-    // TODO: enviar notificación/email a cada firmante en pendingSignerIds
-
     return doc;
-  }
-
-  async updateArtData(documentId: string, userId: string, data: ArtDataDto) {
-    const doc = (await this.findById(documentId)) as DocumentRow;
-
-    if (doc.createdBy !== userId) throw new ForbiddenException('Not your document');
-    if (doc.status === DOCUMENT_STATUS.COMPLETADO) {
-      throw new BadRequestException('Cannot edit a completed document');
-    }
-
-    const merged = { ...(doc.data as object), ...data } as ArtData;
-    const hasPendingSigners = (doc.pendingSignerIds ?? []).length > 0;
-    const mergedStatus = calculateArtStatus(merged);
-    const newStatus = hasPendingSigners ? doc.status : mergedStatus;
-
-    let url: string | null = doc.url ?? null;
-    let size: number | null = doc.size ?? null;
-    if (mergedStatus !== DOCUMENT_STATUS.INCOMPLETO) {
-      const pdf = await this.pdfService.generateArt(merged, userId);
-      url = pdf.url;
-      size = pdf.size;
-    }
-
-    return this.prisma.document.update({
-      where: { id: documentId },
-      data: { data: merged as object, status: newStatus, url, size },
-    });
   }
 
   async signArt(documentId: string, userId: string, dto: SignArtDto) {
@@ -226,15 +169,6 @@ export class DocumentsService {
     });
   }
 
-  // ── Shared ────────────────────────────────────────────────────
-
-  findAll(userId: string) {
-    return this.prisma.document.findMany({
-      where: { createdBy: userId },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
   async findById(id: string) {
     const doc = await this.prisma.document.findUnique({ where: { id } });
     if (!doc) throw new NotFoundException('Document not found');
@@ -266,8 +200,6 @@ export class DocumentsService {
     const signedUrl = await this.storageService.getSignedUrl(filename, expiresInSeconds);
     return { url: signedUrl, expiresIn: expiresInSeconds };
   }
-
-  // ── Private helpers ───────────────────────────────────────────
 
   private async uploadSignatureImage(
     base64DataUrl: string,
