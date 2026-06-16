@@ -89,17 +89,17 @@ function fillTransversales(p: PDFPage, art: ArtData, f: PDFFont): void {
 
 function fillRiesgosCriticos(p: PDFPage, art: ArtData, f: PDFFont, fb: PDFFont): void {
   const R = RIESGOS;
-  const seleccionados = art.riesgosCriticos
-    .filter((r) => r.seleccionado)
-    .slice(0, 6);
 
-  seleccionados.forEach((r, k) => {
-    const bx = R.colsX[k];
-    const codigo = `RF-${String(r.rcNum).padStart(2, '0')}`;
-    const info = RIESGOS_CODELCO.find((x) => x.codigo === codigo);
-    const nombre = info?.nombre ?? '';
+  const drawSection = (
+    riesgos: ArtData['riesgosCriticos'],
+    sec: typeof R.supervisor | typeof R.trabajador,
+  ) => {
+    (riesgos ?? []).filter((r) => r.seleccionado).slice(0, 6).forEach((r, k) => {
+      const bx = R.colsX[k];
+      const codigo = `RF-${String(r.rcNum).padStart(2, '0')}`;
+      const info = RIESGOS_CODELCO.find((x) => x.codigo === codigo);
+      const nombre = info?.nombre ?? '';
 
-    for (const sec of [R.supervisor, R.trabajador]) {
       const lineas = envolver(f, nombre, sec.nombreL1.size, sec.nombreL1.maxW);
       texto(p, f, lineas[0] ?? '', bx + sec.nombreL1.dx, sec.nombreL1.y, sec.nombreL1.size);
       if (lineas.length > 1) {
@@ -113,8 +113,11 @@ function fillRiesgosCriticos(p: PDFPage, art: ArtData, f: PDFFont, fb: PDFFont):
         if (ctrl.aplica === 'si') tick(p, bx + R.siDx, y, true);
         else if (ctrl.aplica === 'no') tick(p, bx + R.noDx, y, false);
       });
-    }
-  });
+    });
+  };
+
+  drawSection(art.riesgosCriticos, R.supervisor);
+  drawSection(art.riesgosCriticosTrabajador, R.trabajador);
 }
 
 // ── PASO 3: Otros riesgos ─────────────────────────────────────

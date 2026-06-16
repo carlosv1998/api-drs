@@ -56,6 +56,7 @@ export interface ArtData {
 
   // ── PASO 2: Riesgos críticos ───────────────────────────────
   riesgosCriticos: ArtRiesgoCritico[];
+  riesgosCriticosTrabajador: ArtRiesgoCritico[];
 
   // ── PASO 3: Otros riesgos ──────────────────────────────────
   otrosRiesgos: ArtOtroRiesgo[];

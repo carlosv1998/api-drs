@@ -103,28 +103,25 @@ export class UsersService {
     return updated;
   }
 
-  async uploadSignature(userId: string, base64: string): Promise<string> {
-    const mimeMatch = base64.match(/^data:(image\/[a-z+]+);base64,/);
-    const mimeType = mimeMatch?.[1] ?? 'image/png';
-    const ext = mimeType.split('/')[1].replace('svg+xml', 'svg');
-    const buffer = Buffer.from(base64.replace(/^data:image\/[a-z+]+;base64,/, ''), 'base64');
-
+  async uploadSignature(userId: string, file: Express.Multer.File): Promise<User> {
+    const ext = file.mimetype.split('/')[1] ?? 'png';
     const filename = `signatures/${userId}.${ext}`;
-    const url = await this.storageService.upload(buffer, filename, mimeType);
+    const url = await this.storageService.upload(file.buffer, filename, file.mimetype, envs.gcp.publicBucketName);
 
-    await this.prisma.user.update({ where: { id: userId }, data: { signatureUrl: url } });
+    const user = await this.prisma.user.update({ where: { id: userId }, data: { signatureUrl: url } });
     this.logger.log(`Signature uploaded for user: ${userId}`);
-    return url;
+    return user;
   }
 
-  async deleteSignature(userId: string): Promise<void> {
+  async deleteSignature(userId: string): Promise<User> {
     const user = await this.findById(userId);
     if (user.signatureUrl) {
-      const filename = user.signatureUrl.split(`storage.googleapis.com/${envs.gcp.bucketName}/`)[1];
-      await this.storageService.delete(filename).catch(() => {});
+      const filename = user.signatureUrl.split(`storage.googleapis.com/${envs.gcp.publicBucketName}/`)[1];
+      await this.storageService.delete(filename, envs.gcp.publicBucketName).catch(() => {});
     }
-    await this.prisma.user.update({ where: { id: userId }, data: { signatureUrl: null } });
+    const updated = await this.prisma.user.update({ where: { id: userId }, data: { signatureUrl: null } });
     this.logger.log(`Signature deleted for user: ${userId}`);
+    return updated;
   }
 
   async verifyEmail(userId: string): Promise<User> {

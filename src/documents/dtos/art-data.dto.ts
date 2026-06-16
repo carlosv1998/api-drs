@@ -77,6 +77,12 @@ export class ArtDataDto {
   @IsOptional()
   riesgosCriticos?: ArtRiesgoCriticoDto[];
 
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ArtRiesgoCriticoDto)
+  @IsOptional()
+  riesgosCriticosTrabajador?: ArtRiesgoCriticoDto[];
+
   // ── PASO 3 ─────────────────────────────────────────────────
   @IsArray()
   @ValidateNested({ each: true })

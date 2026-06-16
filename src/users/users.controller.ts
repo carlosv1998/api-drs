@@ -16,7 +16,6 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { PaginatedQueryDto } from 'src/common/dtos/filter.dto';
 import { GetUser } from 'src/main/decorators/get-user.decorator';
 import { UpdateUserDto } from './dtos/update-user.dto';
-import { UploadSignatureDto } from './dtos/upload-signature.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -63,12 +62,21 @@ export class UsersController {
   }
 
   @Patch('me/signature')
+  @UseInterceptors(FileInterceptor('file'))
   uploadSignature(
     @GetUser('id') userId: string,
-    @Body() { signature }: UploadSignatureDto,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 2 * 1024 * 1024 }),
+          new FileTypeValidator({ fileType: /(png|jpeg|svg)/ }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
   ) {
     this.logger.debug(`Received request to upload signature for user ${userId}`);
-    return this.usersService.uploadSignature(userId, signature);
+    return this.usersService.uploadSignature(userId, file);
   }
 
   @Delete('me/signature')
