@@ -13,15 +13,25 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { DocumentsService } from './documents.service';
 import { UploadDocumentDto } from './dtos/upload-document.dto';
-import { SignArtDto } from './dtos/sign-art.dto';
 import { GetUser } from 'src/main/decorators/get-user.decorator';
 import { CreateArtDtoV2 } from './dtos/art-data-v2.dto';
+import { RequirePermissions } from 'src/permissions/decorators/require-permissions.decorator';
+import { SCOPE_NAME } from 'src/common/enums/scopes.enum';
+import { PaginatedQueryDto } from 'src/common/dtos/filter.dto';
 
 @Controller('documents')
 export class DocumentsController {
   private readonly logger = new Logger(DocumentsController.name);
 
   constructor(private readonly documentsService: DocumentsService) {}
+
+  @RequirePermissions([SCOPE_NAME.DOCUMENTS_ART_READ])
+  @Get()
+  findAll(@Query() query: PaginatedQueryDto) {
+    this.logger.debug('Received request to find all documents');
+    const { page, pageSize, filterDto } = query;
+    return this.documentsService.findAll({ page, pageSize }, filterDto);
+  }
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
@@ -37,16 +47,6 @@ export class DocumentsController {
   createArt(@Body() artData: CreateArtDtoV2, @GetUser('id') createdById: string) {
     this.logger.debug(`Creating ART by user ${createdById}`);
     return this.documentsService.createArt(createdById, artData);
-  }
-
-  @Post('art/:id/sign')
-  signArt(
-    @Param('id') id: string,
-    @Body() dto: SignArtDto,
-    @GetUser('id') userId: string,
-  ) {
-    this.logger.debug(`User ${userId} signing ART ${id}`);
-    return this.documentsService.signArt(id, userId, dto);
   }
 
   @Get(':id')

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -22,6 +23,9 @@ import { Prisma } from '@prisma/client';
 import { envs } from 'src/config/envs';
 import { CreateArtDtoV2 } from './dtos/art-data-v2.dto';
 import { IDocumentArtData } from './interfaces/document-art-data.interface';
+import { FilterDto, PaginationDto } from 'src/common/dtos/filter.dto';
+import { IPaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
+import { PrismaHelper } from 'src/common/helpers/prisma.helper';
 
 type DocumentRow = Awaited<ReturnType<PrismaService['document']['findUniqueOrThrow']>> & {
   data: unknown;
@@ -31,6 +35,8 @@ type DocumentRow = Awaited<ReturnType<PrismaService['document']['findUniqueOrThr
 
 @Injectable()
 export class DocumentsService {
+  private readonly logger = new Logger(DocumentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: GcpStorageService,
@@ -88,85 +94,23 @@ export class DocumentsService {
     return doc;
   }
 
-  async signArt(documentId: string, userId: string, dto: SignArtDto) {
-    const doc = (await this.findById(documentId)) as DocumentRow;
+  async findAll(
+    paginationDto: PaginationDto,
+    filterDto?: FilterDto,
+  ): Promise<IPaginatedResponse<any>> {
+    const where = PrismaHelper.buildWhere(filterDto);
+    const orderBy = PrismaHelper.buildOrderBy(filterDto);
 
-    if (
-      doc.status !== DOCUMENT_STATUS.PENDIENTE_FIRMAS &&
-      doc.status !== DOCUMENT_STATUS.PENDIENTE_LIDER
-    ) {
-      throw new BadRequestException('Document is not awaiting signatures');
-    }
+    const result = await PrismaHelper.paginate(
+      (args) => this.prisma.document.findMany({ ...args }),
+      (args) => this.prisma.document.count(args),
+      paginationDto,
+      where,
+      orderBy,
+    );
 
-    const signatures = doc.signatures as ArtSignatures | null;
-    if (!signatures) throw new BadRequestException('Document has no signing workflow');
-
-    const isLider = signatures.lider?.userId === userId;
-    const participanteIdx = signatures.participantes.findIndex((p) => p.userId === userId);
-    const isParticipante = participanteIdx !== -1;
-
-    if (!isLider && !isParticipante) {
-      throw new ForbiddenException('You are not a signer for this document');
-    }
-
-    const signatureUrl = await this.uploadSignatureImage(dto.signature, userId, documentId);
-
-    // Copy to mutate safely
-    const updated: ArtSignatures = {
-      lider: signatures.lider ? { ...signatures.lider } : null,
-      participantes: signatures.participantes.map((p) => ({ ...p })),
-    };
-
-    if (isLider) {
-      if (updated.lider!.hasSigned) throw new BadRequestException('Already signed');
-      if (doc.status !== DOCUMENT_STATUS.PENDIENTE_LIDER) {
-        throw new BadRequestException('Participants must sign before the leader');
-      }
-      updated.lider = {
-        ...updated.lider!,
-        verificoCondiciones: dto.verificoCondiciones ?? null,
-        hasSigned: true,
-        signedAt: new Date().toISOString(),
-        signatureUrl,
-      };
-    } else {
-      if (updated.participantes[participanteIdx].hasSigned) {
-        throw new BadRequestException('Already signed');
-      }
-      updated.participantes[participanteIdx] = {
-        ...updated.participantes[participanteIdx],
-        enCondiciones: dto.enCondiciones ?? null,
-        hasSigned: true,
-        signedAt: new Date().toISOString(),
-        signatureUrl,
-      };
-    }
-
-    const pendingSignerIds = [
-      ...updated.participantes.filter((p) => !p.hasSigned).map((p) => p.userId),
-      ...(updated.lider && !updated.lider.hasSigned ? [updated.lider.userId] : []),
-    ];
-
-    const allParticipantesSigned = updated.participantes.every((p) => p.hasSigned);
-    const liderSigned = updated.lider ? updated.lider.hasSigned : true;
-
-    let newStatus = doc.status;
-
-    if (allParticipantesSigned && !liderSigned && doc.status === DOCUMENT_STATUS.PENDIENTE_FIRMAS) {
-      newStatus = DOCUMENT_STATUS.PENDIENTE_LIDER;
-      // TODO: notificar al líder (updated.lider!.userId) que puede firmar
-    }
-
-    if (allParticipantesSigned && liderSigned) {
-      newStatus = DOCUMENT_STATUS.COMPLETADO;
-      // TODO: notificar al creador (doc.createdBy) que el ART está completado
-      // TODO: regenerar PDF final con las firmas embebidas visualmente
-    }
-
-    return this.prisma.document.update({
-      where: { id: documentId },
-      data: { signatures: updated as unknown as Prisma.InputJsonValue, pendingSignerIds, status: newStatus },
-    });
+    this.logger.log(`Documents found: ${result.pagination.total}`);
+    return result;
   }
 
   async findById(id: string) {
