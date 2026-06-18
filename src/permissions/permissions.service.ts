@@ -42,12 +42,14 @@ export class PermissionsService {
             roles: data.roles ?? [],
             allowedScopes: data.allowedScopes ?? [],
             deniedScopes: data.deniedScopes ?? [],
+            jobTitle: data.jobTitle,
           },
           update: {
             assignedById,
             roles: data.roles ?? [],
             allowedScopes: data.allowedScopes ?? [],
             deniedScopes: data.deniedScopes ?? [],
+            jobTitle: data.jobTitle,
           },
         });
 

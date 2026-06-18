@@ -1,4 +1,5 @@
-import { IsArray, IsMongoId, IsOptional } from 'class-validator';
+import { IsArray, IsEnum, IsMongoId, IsOptional } from 'class-validator';
+import { PERMISSION_JOB_TITLE } from '../enums/job-title.enum';
 
 export class UpdatePermissionDto {
   @IsMongoId()
@@ -18,4 +19,7 @@ export class UpdatePermissionDto {
   @IsArray()
   @IsOptional()
   deniedScopes?: string[];
+
+  @IsEnum(PERMISSION_JOB_TITLE)
+  jobTitle?: PERMISSION_JOB_TITLE;
 }

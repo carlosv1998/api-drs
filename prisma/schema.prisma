@@ -19,9 +19,48 @@ model User {
   signatureUrl  String?
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
-  maintenances  VehicleMaintenance[]
+  permission                Permission?
+  assignedPermissions       Permission[]                       @relation("PermissionAssignedBy")
+  notifications             Notification[]
+  pushTokens                PushToken[]
+  maintenances              VehicleMaintenance[]
+  capDocCreados             CapacitacionDifusionDocument[]     @relation("CapDocCreatedBy")
+  capDocComoRelator         CapacitacionDifusionDocument[]     @relation("CapDocRelator")
+  participaciones           CapacitacionDifusionParticipante[]
 
   @@map("users")
+}
+
+enum NotificationType {
+  FIRMA_DOCUMENTO
+  ACEPTAR_CONTRATO
+  GENERAL
+}
+
+model Notification {
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String           @db.ObjectId
+  user      User             @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  body      String
+  read      Boolean          @default(false)
+  route     String?
+  payload   Json?
+  createdAt DateTime         @default(now())
+
+  @@map("notifications")
+}
+
+// Almacena el token de Expo Push para enviar notificaciones nativas
+model PushToken {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  token     String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("push_tokens")
 }
 
 model Token {
@@ -74,6 +113,30 @@ model Role {
   @@map("roles")
 }
 
+enum PermissionJobTitle {
+  usuario
+  logistica
+  seguridad_ocupacional
+  construccion
+  difusion
+}
+
+model Permission {
+  id              String             @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String             @unique @db.ObjectId
+  user            User               @relation(fields: [userId], references: [id])
+  roles           String[]           @db.ObjectId
+  allowedScopes String[]           @db.ObjectId
+  deniedScopes  String[]           @db.ObjectId
+  assignedById    String             @db.ObjectId
+  assignedBy      User               @relation("PermissionAssignedBy", fields: [assignedById], references: [id])
+  jobTitle        PermissionJobTitle
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@map("permissions")
+}
+
 model Document {
   id               String   @id @default(auto()) @map("_id") @db.ObjectId
   createdBy        String   @db.ObjectId
@@ -90,19 +153,6 @@ model Document {
   updatedAt        DateTime @updatedAt
 
   @@map("documents")
-}
-
-model Permission {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId        String   @unique @db.ObjectId
-  roles         String[] @db.ObjectId
-  allowedScopes String[] @db.ObjectId
-  deniedScopes  String[] @db.ObjectId
-  assignedById  String   @db.ObjectId
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@map("permissions")
 }
 
 model Product {
@@ -147,4 +197,50 @@ model VehicleMaintenance {
   updatedAt              DateTime @updatedAt
 
   @@map("vehicle_maintenances")
+}
+
+model CapacitacionDifusionDocument {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  description String?
+  url         String?
+  status      String  @default("CREADO")
+  size        Int?
+  mimetype    String?
+
+  // campos tipados de IDocumentCapacitacionDifusionData
+  codigo        String
+  revision      Int
+  tipoActividad String  // CAPACITACION_DIFUSION_TYPE
+  modalidad     String  // CAPACITACION_DIFUSION_MODALIDAD
+  asistencia    String  // CAPACITACION_DIFUSION_ASISTENCIA
+  ubicacion     String
+  temaPrincipal String[]
+  fecha         DateTime
+  horaInicio    String
+  horaTermino   String
+
+  // relaciones a usuarios
+  createdById   String   @db.ObjectId
+  createdBy     User     @relation("CapDocCreatedBy", fields: [createdById], references: [id])
+  relatorId     String   @db.ObjectId
+  relator       User     @relation("CapDocRelator", fields: [relatorId], references: [id])
+  participantes CapacitacionDifusionParticipante[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("capacitacion_difusion_documents")
+}
+
+model CapacitacionDifusionParticipante {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  documentId String    @db.ObjectId
+  userId     String    @db.ObjectId
+  signedAt   DateTime?
+  signature  String?
+
+  document   CapacitacionDifusionDocument @relation(fields: [documentId], references: [id])
+  user       User                         @relation(fields: [userId], references: [id])
+
+  @@map("capacitacion_difusion_participantes")
 }

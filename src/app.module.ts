@@ -12,6 +12,7 @@ import { PermissionsModule } from './permissions/permissions.module';
 import { DocumentsModule } from './documents/documents.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { ProductsModule } from './products/products.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ProductsModule } from './products/products.module';
     DocumentsModule,
     VehiclesModule,
     ProductsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

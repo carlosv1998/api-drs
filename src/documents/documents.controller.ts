@@ -6,18 +6,14 @@ import {
   Param,
   Post,
   Query,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
 import { DocumentsService } from './documents.service';
-import { UploadDocumentDto } from './dtos/upload-document.dto';
 import { GetUser } from 'src/main/decorators/get-user.decorator';
 import { CreateArtDtoV2 } from './dtos/art-data-v2.dto';
 import { RequirePermissions } from 'src/permissions/decorators/require-permissions.decorator';
 import { SCOPE_NAME } from 'src/common/enums/scopes.enum';
-import { PaginatedQueryDto } from 'src/common/dtos/filter.dto';
+import { PaginatedQueryDto, PaginationDto } from 'src/common/dtos/filter.dto';
+import { CreateCapacitacionDifusionDataDto } from './dtos/capacitacion-difusion-data.dto';
 
 @Controller('documents')
 export class DocumentsController {
@@ -33,20 +29,44 @@ export class DocumentsController {
     return this.documentsService.findAll({ page, pageSize }, filterDto);
   }
 
-  @Post('upload')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
-  uploadFile(
-    @UploadedFile() file: Express.Multer.File,
-    @Body() data: UploadDocumentDto,
-    @GetUser('id') userId: string,
-  ) {
-    return this.documentsService.uploadFile(file, userId, data);
-  }
-
   @Post('art')
   createArt(@Body() artData: CreateArtDtoV2, @GetUser('id') createdById: string) {
     this.logger.debug(`Creating ART by user ${createdById}`);
     return this.documentsService.createArt(createdById, artData);
+  }
+
+  @Post('capacitacion-difusion')
+  createCapacitacionDifusion(
+    @Body() capacitacionDifusionData: CreateCapacitacionDifusionDataDto,
+    @GetUser('id') createdById: string
+  ) {
+    this.logger.debug(`Creating ART by user ${createdById}`);
+    return this.documentsService.createCapacitacionDifusion(createdById, capacitacionDifusionData);
+  }
+
+  // mis-documentos must be declared BEFORE :id to avoid route collision
+  @Get('capacitacion-difusion/mis-documentos')
+  getMisCapacitacionDocumentos(
+    @GetUser('id') userId: string,
+    @Query() paginationDto: PaginationDto,
+  ) {
+    return this.documentsService.findMisCapacitacionDocumentos(userId, paginationDto);
+  }
+
+  @Get('capacitacion-difusion/:id')
+  getCapacitacionDifusion(
+    @Param('id') id: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.documentsService.findCapacitacionDifusionById(id, userId);
+  }
+
+  @Post('capacitacion-difusion/:id/firmar')
+  firmarCapacitacionDifusion(
+    @Param('id') id: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.documentsService.firmarCapacitacionDifusion(id, userId);
   }
 
   @Get(':id')

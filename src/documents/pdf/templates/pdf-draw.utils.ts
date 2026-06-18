@@ -63,25 +63,34 @@ export function envolver(font: PDFFont, s: string, size: number, maxW: number): 
 export async function dibujarFirma(
   doc: PDFDocument,
   page: PDFPage,
-  dataUrl: string | undefined,
+  urlOrDataUrl: string | undefined | null,
   xc: number,
   yc: number,
   maxW: number,
   maxH: number,
 ): Promise<void> {
-  if (!dataUrl) return;
+  if (!urlOrDataUrl) return;
   try {
-    const base64 = dataUrl.replace(/^data:image\/(png|jpe?g);base64,/, '');
-    const bytes = Buffer.from(base64, 'base64');
-    const img =
-      dataUrl.includes('jpeg') || dataUrl.includes('jpg')
-        ? await doc.embedJpg(bytes)
-        : await doc.embedPng(bytes);
+    let bytes: Buffer;
+    let isJpeg: boolean;
+
+    if (urlOrDataUrl.startsWith('http://') || urlOrDataUrl.startsWith('https://')) {
+      const res = await fetch(urlOrDataUrl);
+      const contentType = res.headers.get('content-type') ?? '';
+      isJpeg = contentType.includes('jpeg') || /\.jpe?g(\?|$)/i.test(urlOrDataUrl);
+      bytes = Buffer.from(await res.arrayBuffer());
+    } else {
+      isJpeg = urlOrDataUrl.includes('jpeg') || urlOrDataUrl.includes('jpg');
+      const base64 = urlOrDataUrl.replace(/^data:image\/(png|jpe?g);base64,/, '');
+      bytes = Buffer.from(base64, 'base64');
+    }
+
+    const img = isJpeg ? await doc.embedJpg(bytes) : await doc.embedPng(bytes);
     const escala = Math.min(maxW / img.width, maxH / img.height, 1);
     const w = img.width * escala;
     const h = img.height * escala;
     page.drawImage(img, { x: xc - w / 2, y: yc - h / 2, width: w, height: h });
   } catch {
-    // firma inválida: se omite sin romper la generación
+    // firma inválida o URL inalcanzable: se omite sin romper la generación
   }
 }
