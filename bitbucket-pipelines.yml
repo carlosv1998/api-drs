@@ -1,0 +1,36 @@
+image: google/cloud-sdk:alpine
+
+pipelines:
+  branches:
+    main:
+      - step:
+          name: Build & Deploy to Dev
+          script:
+            - echo $GCP_SERVICE_ACCOUNT_KEY | base64 -d > /tmp/gcp-key.json
+            - gcloud auth activate-service-account --key-file /tmp/gcp-key.json
+            - gcloud config set project $GCP_PROJECT_ID
+            - export IMAGE=us-central1-docker.pkg.dev/$GCP_PROJECT_ID/drs-api/drs-api:$BITBUCKET_COMMIT
+            - gcloud builds submit --tag $IMAGE
+            - gcloud run deploy drs-api
+                --image $IMAGE
+                --platform managed
+                --region us-central1
+                --quiet
+          deployment: development
+
+  custom:
+    deploy-production:
+      - step:
+          name: Deploy to Production
+          trigger: manual
+          deployment: production
+          script:
+            - echo $GCP_SERVICE_ACCOUNT_KEY | base64 -d > /tmp/gcp-key.json
+            - gcloud auth activate-service-account --key-file /tmp/gcp-key.json
+            - gcloud config set project $GCP_PROJECT_ID
+            - export IMAGE=us-central1-docker.pkg.dev/$GCP_PROJECT_ID/drs-api/drs-api:$BITBUCKET_COMMIT
+            - gcloud run deploy drs-api-prod
+                --image $IMAGE
+                --platform managed
+                --region us-central1
+                --quiet
