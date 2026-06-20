@@ -54,6 +54,7 @@ export class PermissionsController {
     return { allowed };
   }
 
+  @RequirePermissions([SCOPE_NAME.PERMISSIONS_CREATE])
   @Get('user/:userId')
   findUserWithPermissions(@Param('userId') userId: string) {
     this.logger.debug(`Received request to get profile + permissions for user ${userId}`);

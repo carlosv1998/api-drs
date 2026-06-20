@@ -29,7 +29,7 @@ export class DocumentsController {
     return this.documentsService.findAll({ page, pageSize }, filterDto);
   }
 
-  @RequirePermissions([SCOPE_NAME.DOCUMENTS_ART_READ])
+  @RequirePermissions([SCOPE_NAME.DOCUMENTS_CAPACITACION_DIFUSION_READ])
   @Get('capacitacion-difusion')
   findAllCapacitacionDifusionDocuments(@Query() query: PaginatedQueryDto) {
     this.logger.debug('Received request to find all capacitacion difusion documents');
@@ -37,12 +37,14 @@ export class DocumentsController {
     return this.documentsService.findAllCapacitacionDifusionDocuments({ page, pageSize }, filterDto);
   }
 
+  @RequirePermissions([SCOPE_NAME.DOCUMENTS_ART_CREATE])
   @Post('art')
   createArt(@Body() artData: CreateArtDtoV2, @GetUser('id') createdById: string) {
     this.logger.debug(`Creating ART by user ${createdById}`);
     return this.documentsService.createArt(createdById, artData);
   }
 
+  @RequirePermissions([SCOPE_NAME.DOCUMENTS_CAPACITACION_DIFUSION_CREATE])
   @Post('capacitacion-difusion')
   createCapacitacionDifusion(
     @Body() capacitacionDifusionData: CreateCapacitacionDifusionDataDto,
@@ -73,6 +75,7 @@ export class DocumentsController {
     );
   }
 
+  @RequirePermissions([SCOPE_NAME.DOCUMENTS_CAPACITACION_DIFUSION_READ])
   @Get('capacitacion-difusion/:id')
   getCapacitacionDifusion(
     @Param('id') id: string,
@@ -105,11 +108,13 @@ export class DocumentsController {
     return this.documentsService.firmarCapacitacionDifusion(id, userId);
   }
 
+  @RequirePermissions([SCOPE_NAME.DOCUMENTS_ART_READ])
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.documentsService.findById(id);
   }
 
+  @RequirePermissions([SCOPE_NAME.DOCUMENTS_ART_READ])
   @Get('art/:id/signed-url')
   getSignedUrl(@Param('id') id: string, @Query('expiresIn') expiresIn?: string) {
     return this.documentsService.getSignedUrl(id, expiresIn ? parseInt(expiresIn, 10) : 3600);

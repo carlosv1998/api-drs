@@ -21,6 +21,8 @@ import { IDocumentCapacitacionDifusionRelatorData, IDocumentCapacitacionDifusion
 import { BASE_PROYECT_NAME } from './pdf/constants';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { NotificationType } from '@prisma/client';
+import { RealtimeService } from 'src/realtime/realtime.service';
+import { SCOPE_NAME } from 'src/common/enums/scopes.enum';
 
 @Injectable()
 export class DocumentsService {
@@ -31,6 +33,7 @@ export class DocumentsService {
     private readonly storageService: GcpStorageService,
     private readonly pdfService: PdfService,
     private readonly notificationsService: NotificationsService,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async createArt(userId: string, artData: CreateArtDtoV2) {
@@ -307,6 +310,21 @@ export class DocumentsService {
 
     await this.regenerarCapacitacionDifusionPdf(documentId);
 
+    const listItem = await this.fetchCapacitacionDifusionListItem(documentId);
+    if (listItem) {
+      const signedParticipante = listItem.participantes.find((p) => p.userId === userId);
+      await this.realtimeService.emitToScopes(
+        [SCOPE_NAME.DOCUMENTS_CAPACITACION_DIFUSION_READ],
+        'document:capacitacion-difusion:signed',
+        {
+          documentId,
+          signedByUserId: userId,
+          signedAt: signedParticipante?.signedAt?.toISOString() ?? new Date().toISOString(),
+          listItem,
+        },
+      );
+    }
+
     return { success: true };
   }
 
@@ -414,7 +432,13 @@ export class DocumentsService {
     const orderBy = PrismaHelper.buildOrderBy(filterDto);
 
     const result = await PrismaHelper.paginate(
-      (args) => this.prisma.capacitacionDifusionDocument.findMany({ ...args }),
+      (args) => this.prisma.capacitacionDifusionDocument.findMany({
+        ...args,
+        include: {
+          relator: { select: { firstName: true, lastName: true } },
+          participantes: { select: { signedAt: true } },
+        },
+      }),
       (args) => this.prisma.capacitacionDifusionDocument.count(args),
       paginationDto,
       where,
@@ -423,6 +447,24 @@ export class DocumentsService {
 
     this.logger.log(`Capacitacion Difusion Documents found: ${result.pagination.total}`);
     return result;
+  }
+
+  private async fetchCapacitacionDifusionListItem(id: string) {
+    return this.prisma.capacitacionDifusionDocument.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        temaPrincipal: true,
+        fecha: true,
+        horaInicio: true,
+        horaTermino: true,
+        ubicacion: true,
+        status: true,
+        createdAt: true,
+        relator: { select: { firstName: true, lastName: true } },
+        participantes: { select: { signedAt: true, userId: true } },
+      },
+    });
   }
 
   async findById(id: string) {

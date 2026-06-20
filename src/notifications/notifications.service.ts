@@ -2,12 +2,22 @@ import { Injectable, Logger } from '@nestjs/common';
 import { NotificationType, Prisma } from '@prisma/client';
 import Expo, { ExpoPushMessage } from 'expo-server-sdk';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { NotificationsGateway } from './notifications.gateway';
+import { RealtimeService } from 'src/realtime/realtime.service';
+import { SCOPE_NAME } from 'src/common/enums/scopes.enum';
 import { PaginationDto } from 'src/common/dtos/filter.dto';
 import { PrismaHelper } from 'src/common/helpers/prisma.helper';
 
 export interface SendNotificationParams {
   userIds: string[];
+  type: NotificationType;
+  title: string;
+  body: string;
+  route?: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface SendNotificationToScopesParams {
+  scopes: SCOPE_NAME[];
   type: NotificationType;
   title: string;
   body: string;
@@ -22,7 +32,7 @@ export class NotificationsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gateway: NotificationsGateway,
+    private readonly realtime: RealtimeService,
   ) {}
 
   // ── Push token ─────────────────────────────────────────────
@@ -41,10 +51,10 @@ export class NotificationsService {
 
   // ── Enviar notificación ────────────────────────────────────
 
+  /** Send a persisted notification (DB + WebSocket + push) to explicit user IDs. */
   async send({ userIds, type, title, body, route, payload }: SendNotificationParams) {
     if (userIds.length === 0) return;
 
-    // 1. Crear registros en BD para todos los destinatarios
     await this.prisma.notification.createMany({
       data: userIds.map((userId) => ({
         userId, type, title, body, route,
@@ -52,12 +62,16 @@ export class NotificationsService {
       })),
     });
 
-    // 2. Emitir por WebSocket a usuarios conectados
     const notificationEvent = { type, title, body, route, payload };
-    this.gateway.emitToUsers(userIds, 'notification', notificationEvent);
+    this.realtime.emitToUsers(userIds, 'notification', notificationEvent);
 
-    // 3. Enviar push nativa via Expo a dispositivos registrados
     await this.sendExpoPush(userIds, { title, body, route, payload });
+  }
+
+  /** Send a persisted notification (DB + WebSocket + push) to all users with any of the given scopes. */
+  async sendToScopes({ scopes, ...rest }: SendNotificationToScopesParams) {
+    const userIds = await this.realtime.resolveUserIdsByScopes(scopes);
+    return this.send({ userIds, ...rest });
   }
 
   // ── Consultas ──────────────────────────────────────────────

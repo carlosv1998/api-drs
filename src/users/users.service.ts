@@ -10,6 +10,8 @@ import { CustomBadRequestException } from 'src/common/exceptions/custom-exceptio
 import { GcpStorageService } from 'src/documents/storage/gcp-storage.service';
 import { envs } from 'src/config/envs';
 import { USER_ERRORS } from './errors';
+import { RequirePermissions } from 'src/permissions/decorators/require-permissions.decorator';
+import { SCOPE_NAME } from 'src/common/enums/scopes.enum';
 
 @Injectable()
 export class UsersService {
@@ -20,10 +22,11 @@ export class UsersService {
     private readonly storageService: GcpStorageService,
   ) {}
 
+  @RequirePermissions([SCOPE_NAME.PERMISSIONS_CREATE])
   async findAll(
     paginationDto: PaginationDto,
     filterDto?: FilterDto,
-  ): Promise<IPaginatedResponse<User>> {
+  ): Promise<IPaginatedResponse<User & { permission: { jobTitle: string } | null }>> {
     const where = PrismaHelper.buildWhere(filterDto, [
       'firstName',
       'lastName',
@@ -33,7 +36,10 @@ export class UsersService {
     const orderBy = PrismaHelper.buildOrderBy(filterDto);
 
     const result = await PrismaHelper.paginate(
-      (args) => this.prisma.user.findMany(args),
+      (args) => this.prisma.user.findMany({
+        ...args,
+        include: { permission: { select: { jobTitle: true } } },
+      }) as Promise<(User & { permission: { jobTitle: string } | null })[]>,
       (args) => this.prisma.user.count(args),
       paginationDto,
       where,

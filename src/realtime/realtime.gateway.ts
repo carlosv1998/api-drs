@@ -8,11 +8,13 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 
-@WebSocketGateway({ cors: { origin: '*' }, namespace: '/notifications' })
-export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisconnect {
+@WebSocketGateway({ cors: { origin: '*' }, namespace: '/realtime' })
+export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
 
-  private readonly logger = new Logger(NotificationsGateway.name);
+  private readonly logger = new Logger(RealtimeGateway.name);
+
+  // userId → Set of socketIds (a user can have multiple connected devices)
   private readonly userSockets = new Map<string, Set<string>>();
 
   constructor(private readonly jwtService: JwtService) {}
@@ -49,6 +51,10 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
     this.logger.log(`Disconnected: ${client.id}`);
   }
 
+  emitToAll(event: string, payload: unknown) {
+    this.server.emit(event, payload);
+  }
+
   emitToUser(userId: string, event: string, payload: unknown) {
     const sockets = this.userSockets.get(userId);
     if (!sockets) return;
@@ -61,5 +67,9 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
     for (const userId of userIds) {
       this.emitToUser(userId, event, payload);
     }
+  }
+
+  getConnectedUserIds(): string[] {
+    return [...this.userSockets.keys()];
   }
 }

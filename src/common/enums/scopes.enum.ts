@@ -7,6 +7,7 @@ export enum SCOPE_NAME {
   ROLES_CREATE = 'roles:create',
   ROLES_UPDATE = 'roles:update',
   ROLES_READ = 'roles:read',
+  ROLES_DELETE = 'roles:delete',
 
   //permissions
   PERMISSIONS_CREATE = 'permissions:create',
@@ -27,6 +28,8 @@ export enum SCOPE_NAME {
 
   //TODO: agregar scopes de documentos (art, etc)
   DOCUMENTS_ART_READ = 'document:art:read',
+  DOCUMENTS_ART_CREATE = 'document:art:create',
 
   DOCUMENTS_CAPACITACION_DIFUSION_READ = 'document:capacitacion-difusion:read',
+  DOCUMENTS_CAPACITACION_DIFUSION_CREATE = 'document:capacitacion-difusion:create',
 }

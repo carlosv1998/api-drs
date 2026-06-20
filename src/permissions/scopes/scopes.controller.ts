@@ -27,24 +27,28 @@ export class ScopesController {
     return this.scopesService.create(data);
   }
 
+  @RequirePermissions([SCOPE_NAME.SCOPES_READ])
   @Get()
   findAll() {
     this.logger.debug('Received request to list scopes');
     return this.scopesService.findAll();
   }
 
+  @RequirePermissions([SCOPE_NAME.SCOPES_READ])
   @Get(':id')
   findOne(@Param('id') id: string) {
     this.logger.debug(`Received request to get scope ${id}`);
     return this.scopesService.findById(id);
   }
 
+  @RequirePermissions([SCOPE_NAME.SCOPES_UPDATE])
   @Patch(':id')
   update(@Param('id') id: string, @Body() data: UpdateScopeDto) {
     this.logger.debug(`Received request to update scope ${id}`);
     return this.scopesService.update(id, data);
   }
 
+  @RequirePermissions([SCOPE_NAME.SCOPES_DELETE])
   @Delete(':id')
   delete(@Param('id') id: string) {
     this.logger.debug(`Received request to delete scope ${id}`);
