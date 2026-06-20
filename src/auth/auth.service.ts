@@ -8,6 +8,7 @@ import {
   CustomNotFoundException,
   CustomUnauthorizedException,
 } from 'src/common/exceptions/custom-exceptions';
+import { JwtPayload } from 'src/main/strategies/jwt.strategy';
 import { EmailsService } from 'src/emails/emails.service';
 import { EMAIL_TYPE } from 'src/common/enums/email-type.enum';
 import { ORIGIN } from 'src/common/enums/origin.enum';
@@ -90,6 +91,7 @@ export class AuthService {
     return {
       user: sanitized,
       token: this.signToken(user.id, user.email, session.id),
+      refreshToken: this.signRefreshToken(user.id, user.email, session.id),
       session: {
         id: session.id,
         deviceType: session.deviceType,
@@ -136,7 +138,40 @@ export class AuthService {
     return { success: true };
   }
 
+  async refresh(refreshTokenStr: string) {
+    let payload: JwtPayload & { type?: string };
+    try {
+      payload = this.jwtService.verify(refreshTokenStr, {
+        secret: envs.tokens.refreshTokenKey,
+      });
+    } catch {
+      throw new CustomUnauthorizedException('Invalid refresh token');
+    }
+
+    if (payload.type !== 'refresh') {
+      throw new CustomUnauthorizedException('Invalid token type');
+    }
+
+    const session = await this.sessionService.findById(payload.sessionId);
+    if (!session || session.expiresAt < new Date()) {
+      if (session) await this.sessionService.delete(session.id);
+      throw new CustomUnauthorizedException('Session expired or revoked');
+    }
+
+    return { token: this.signToken(payload.sub, payload.email, payload.sessionId) };
+  }
+
   private signToken(userId: string, email: string, sessionId: string): string {
     return this.jwtService.sign({ sub: userId, email, sessionId });
+  }
+
+  private signRefreshToken(userId: string, email: string, sessionId: string): string {
+    return this.jwtService.sign(
+      { sub: userId, email, sessionId, type: 'refresh' },
+      {
+        secret: envs.tokens.refreshTokenKey,
+        expiresIn: Math.floor(envs.tokens.refreshTokenExpiration / 1000),
+      },
+    );
   }
 }

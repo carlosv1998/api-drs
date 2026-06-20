@@ -17,7 +17,7 @@ export class SessionService {
   async create(data: CreateSessionData) {
     await this.enforceMaxSessions(data.userId);
 
-    const expiresAt = new Date(Date.now() + envs.tokens.accessTokenExpiration);
+    const expiresAt = new Date(Date.now() + envs.tokens.refreshTokenExpiration);
     return this.prisma.session.create({ data: { ...data, expiresAt } });
   }
 

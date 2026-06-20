@@ -10,6 +10,8 @@ interface EnvVars {
   RESEND_DOMAIN_EMAIL: string;
   ACCESS_TOKEN_KEY: string;
   ACCESS_TOKEN_EXPIRATION: number;
+  REFRESH_TOKEN_KEY: string;
+  REFRESH_TOKEN_EXPIRATION: number;
   MAX_SESSIONS_PER_USER: number;
   WEB_CLIENT_URL: string;
   GCP_PROJECT_ID: string;
@@ -31,6 +33,8 @@ const envsSchema = joi
     RESEND_DOMAIN_EMAIL: joi.string().required(),
     ACCESS_TOKEN_KEY: joi.string().required(),
     ACCESS_TOKEN_EXPIRATION: joi.number().required(),
+    REFRESH_TOKEN_KEY: joi.string().required(),
+    REFRESH_TOKEN_EXPIRATION: joi.number().required(),
     MAX_SESSIONS_PER_USER: joi.number().required(),
     WEB_CLIENT_URL: joi.string().required(),
     GCP_PROJECT_ID: joi.string().required(),
@@ -63,6 +67,8 @@ export const envs = {
   tokens: {
     accessTokenKey: envVars.ACCESS_TOKEN_KEY,
     accessTokenExpiration: envVars.ACCESS_TOKEN_EXPIRATION,
+    refreshTokenKey: envVars.REFRESH_TOKEN_KEY,
+    refreshTokenExpiration: envVars.REFRESH_TOKEN_EXPIRATION,
   },
   auth: {
     maxSessionsPerUser: envVars.MAX_SESSIONS_PER_USER,

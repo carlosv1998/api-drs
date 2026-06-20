@@ -54,6 +54,13 @@ export class AuthController {
     return this.authService.verifyEmailCode(userId, code);
   }
 
+  @Public()
+  @Post('refresh')
+  async refresh(@Body() { refreshToken }: { refreshToken: string }) {
+    this.logger.debug('Received request to refresh access token');
+    return this.authService.refresh(refreshToken);
+  }
+
   @Get('me')
   async me(@GetUser('id') userId: string) {
     this.logger.debug('Received request to get current user');
