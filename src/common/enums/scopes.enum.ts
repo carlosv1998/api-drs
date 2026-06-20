@@ -27,4 +27,6 @@ export enum SCOPE_NAME {
 
   //TODO: agregar scopes de documentos (art, etc)
   DOCUMENTS_ART_READ = 'document:art:read',
+
+  DOCUMENTS_CAPACITACION_DIFUSION_READ = 'document:capacitacion-difusion:read',
 }

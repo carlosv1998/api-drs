@@ -22,11 +22,19 @@ export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @RequirePermissions([SCOPE_NAME.DOCUMENTS_ART_READ])
-  @Get()
-  findAll(@Query() query: PaginatedQueryDto) {
-    this.logger.debug('Received request to find all documents');
+  @Get('art')
+  findAllArtDocuments(@Query() query: PaginatedQueryDto) {
+    this.logger.debug('Received request to find all art documents');
     const { page, pageSize, filterDto } = query;
     return this.documentsService.findAll({ page, pageSize }, filterDto);
+  }
+
+  @RequirePermissions([SCOPE_NAME.DOCUMENTS_ART_READ])
+  @Get('capacitacion-difusion')
+  findAllCapacitacionDifusionDocuments(@Query() query: PaginatedQueryDto) {
+    this.logger.debug('Received request to find all capacitacion difusion documents');
+    const { page, pageSize, filterDto } = query;
+    return this.documentsService.findAllCapacitacionDifusionDocuments({ page, pageSize }, filterDto);
   }
 
   @Post('art')
@@ -53,6 +61,18 @@ export class DocumentsController {
     return this.documentsService.findMisCapacitacionDocumentos(userId, paginationDto);
   }
 
+  @RequirePermissions([SCOPE_NAME.DOCUMENTS_ART_READ])
+  @Get('capacitacion-difusion/:id/signed-url')
+  getCapacitacionDifusionSignedUrl(
+    @Param('id') id: string,
+    @Query('expiresIn') expiresIn?: string,
+  ) {
+    return this.documentsService.getCapacitacionDifusionSignedUrl(
+      id,
+      expiresIn ? parseInt(expiresIn, 10) : 3600,
+    );
+  }
+
   @Get('capacitacion-difusion/:id')
   getCapacitacionDifusion(
     @Param('id') id: string,
@@ -69,12 +89,28 @@ export class DocumentsController {
     return this.documentsService.firmarCapacitacionDifusion(id, userId);
   }
 
+  @Get('me/capacitacion-difusion/:id')
+  getMyCapacitacionDifusion(
+    @Param('id') id: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.documentsService.findMyCapacitacionDifusionById(id, userId);
+  }
+
+  @Post('me/capacitacion-difusion/:id/firmar')
+  firmarMyCapacitacionDifusion(
+    @Param('id') id: string,
+    @GetUser('id') userId: string,
+  ) {
+    return this.documentsService.firmarCapacitacionDifusion(id, userId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.documentsService.findById(id);
   }
 
-  @Get(':id/signed-url')
+  @Get('art/:id/signed-url')
   getSignedUrl(@Param('id') id: string, @Query('expiresIn') expiresIn?: string) {
     return this.documentsService.getSignedUrl(id, expiresIn ? parseInt(expiresIn, 10) : 3600);
   }

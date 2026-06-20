@@ -137,22 +137,103 @@ model Permission {
   @@map("permissions")
 }
 
-model Document {
-  id               String   @id @default(auto()) @map("_id") @db.ObjectId
-  createdBy        String   @db.ObjectId
-  type             String
-  description      String?
-  url              String?
-  status           String   @default("CREADO")
-  size             Int?
-  mimetype         String?
+// ─── Composite types para ArtDocument ───────────────────────────────────────
 
-  data             Json?
-  
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+type ArtPlanificacion {
+  supervisorAsignador String
+  empresa             String
+  gerencia            String
+  superintendencia    String
+  lugarEspecifico     String
+  trabajoARealizar    String
+  fecha               String
+  horaInicio          String
+  horaTermino         String
+}
 
-  @@map("documents")
+type ArtPreguntasTransversalesSupervisor {
+  supTieneEstandar        Boolean
+  supNombreEstandar       String?
+  supPersonalCapacitado   Boolean
+  supSolicitoPermisos     Boolean
+  supVerificoSegregacion  Boolean
+  supPersonalComunicacion Boolean
+  supPersonalEPP          Boolean
+}
+
+type ArtPreguntasTransversalesTrabajador {
+  trabConoceEstandar    Boolean
+  trabNombreEstandar    String?
+  trabTieneCompetencias Boolean
+  trabTieneAutorizacion Boolean
+  trabSegrego           Boolean
+  trabConoceEmergencia  Boolean
+  trabUsaEPP            Boolean
+}
+
+type ArtControl {
+  label  String
+  aplica Boolean
+}
+
+type ArtRiesgoCritico {
+  rcNum     Int
+  nombre    String
+  codigo    String
+  controles ArtControl[]
+}
+
+type ArtOtroRiesgo {
+  riesgo        String
+  medidaControl String
+}
+
+type ArtTrabajosSimultaneo {
+  trabajosSimultaneos  Boolean
+  contextoSimultaneo   String?
+  coordinacionLider    Boolean?
+  verificacionCruzada  Boolean?
+  comunicacionAcciones Boolean?
+}
+
+type ArtCondicionesFisicas {
+  liderNombre              String
+  liderCargo               String
+  liderVerificoCondiciones Boolean
+  liderFirma               Boolean
+}
+
+type ArtParticipante {
+  participanteNombre        String
+  participanteCargo         String
+  participanteEnCondiciones Boolean
+  participanteFirma         Boolean
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ArtDocument {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  createdBy   String  @db.ObjectId
+  url         String?
+  status      String  @default("CREADO")
+  size        Int?
+  mimetype    String?
+
+  planificacion                    ArtPlanificacion
+  preguntasTransversalesSupervisor ArtPreguntasTransversalesSupervisor
+  preguntasTransversalesTrabajador ArtPreguntasTransversalesTrabajador
+  riesgosCriticosSupervisor        ArtRiesgoCritico[]
+  riesgosCriticosTrabajador        ArtRiesgoCritico[]
+  otrosRiesgos                     ArtOtroRiesgo[]
+  trabajosSimultaneo               ArtTrabajosSimultaneo?
+  condicionesFisicas               ArtCondicionesFisicas
+  participantes                    ArtParticipante[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("art_documents")
 }
 
 model Product {

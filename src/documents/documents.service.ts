@@ -8,12 +8,9 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { GcpStorageService } from './storage/gcp-storage.service';
 import { PdfService } from './pdf/pdf.service';
 import { DOCUMENT_STATUS } from 'src/common/enums/document-status.enum';
-import { DOCUMENT_TYPE } from 'src/common/enums/document-type.enum';
 import { DOCUMENT_MIMETYPE } from 'src/common/enums/document-mimetype.enum';
-import { Prisma } from '@prisma/client';
 import { envs } from 'src/config/envs';
 import { CreateArtDtoV2 } from './dtos/art-data-v2.dto';
-import { IDocumentArtData } from './interfaces/document-art-data.interface';
 import { FilterDto, PaginationDto } from 'src/common/dtos/filter.dto';
 import { IPaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
 import { PrismaHelper } from 'src/common/helpers/prisma.helper';
@@ -43,27 +40,28 @@ export class DocumentsService {
     url = pdf.url;
     size = pdf.size;
 
-    const finalArtData: IDocumentArtData = {
-      ...artData,
-      condicionesFisicas: {
-        ...artData.condicionesFisicas,
-        liderFirma: Boolean(artData.condicionesFisicas.liderFirma),
-      },
-      participantes: artData.participantes.map((p) => ({
-        ...p,
-        participanteFirma: Boolean(p.participanteFirma),
-      }))
-    }
-
-    const doc = await this.prisma.document.create({
+    const doc = await this.prisma.artDocument.create({
       data: {
         createdBy: userId,
-        type: DOCUMENT_TYPE.ART,
         status: DOCUMENT_STATUS.COMPLETADO,
         url,
         size,
         mimetype: url ? DOCUMENT_MIMETYPE.PDF : null,
-        data: finalArtData as unknown as Prisma.InputJsonValue,
+        planificacion: artData.planificacion,
+        preguntasTransversalesSupervisor: artData.preguntasTransversalesSupervisor,
+        preguntasTransversalesTrabajador: artData.preguntasTransversalesTrabajador,
+        riesgosCriticosSupervisor: artData.riesgosCriticosSupervisor,
+        riesgosCriticosTrabajador: artData.riesgosCriticosTrabajador,
+        otrosRiesgos: artData.otrosRiesgos,
+        trabajosSimultaneo: artData.trabajosSimultaneo ?? null,
+        condicionesFisicas: {
+          ...artData.condicionesFisicas,
+          liderFirma: Boolean(artData.condicionesFisicas.liderFirma),
+        },
+        participantes: artData.participantes.map((p) => ({
+          ...p,
+          participanteFirma: Boolean(p.participanteFirma),
+        })),
       },
     });
 
@@ -235,6 +233,15 @@ export class DocumentsService {
     );
   }
 
+  async findMyCapacitacionDifusionById(id: string, userId: string) {
+    const participante = await this.prisma.capacitacionDifusionParticipante.findFirst({
+      where: { documentId: id, userId },
+    });
+    if (!participante) throw new NotFoundException('Document not found');
+
+    return this.findCapacitacionDifusionById(id, userId);
+  }
+
   async findCapacitacionDifusionById(id: string, userId: string) {
     const doc = await this.prisma.capacitacionDifusionDocument.findUnique({
       where: { id },
@@ -388,8 +395,8 @@ export class DocumentsService {
     const orderBy = PrismaHelper.buildOrderBy(filterDto);
 
     const result = await PrismaHelper.paginate(
-      (args) => this.prisma.document.findMany({ ...args }),
-      (args) => this.prisma.document.count(args),
+      (args) => this.prisma.artDocument.findMany({ ...args }),
+      (args) => this.prisma.artDocument.count(args),
       paginationDto,
       where,
       orderBy,
@@ -399,8 +406,27 @@ export class DocumentsService {
     return result;
   }
 
+  async findAllCapacitacionDifusionDocuments(
+    paginationDto: PaginationDto,
+    filterDto?: FilterDto,
+  ): Promise<IPaginatedResponse<any>> {
+    const where = PrismaHelper.buildWhere(filterDto);
+    const orderBy = PrismaHelper.buildOrderBy(filterDto);
+
+    const result = await PrismaHelper.paginate(
+      (args) => this.prisma.capacitacionDifusionDocument.findMany({ ...args }),
+      (args) => this.prisma.capacitacionDifusionDocument.count(args),
+      paginationDto,
+      where,
+      orderBy,
+    );
+
+    this.logger.log(`Capacitacion Difusion Documents found: ${result.pagination.total}`);
+    return result;
+  }
+
   async findById(id: string) {
-    const doc = await this.prisma.document.findUnique({ where: { id } });
+    const doc = await this.prisma.artDocument.findUnique({ where: { id } });
     if (!doc) throw new NotFoundException('Document not found');
     return doc;
   }
@@ -413,12 +439,22 @@ export class DocumentsService {
       if (filename) await this.storageService.delete(filename).catch(() => {});
     }
 
-    await this.prisma.document.delete({ where: { id, createdBy: userId } });
+    await this.prisma.artDocument.delete({ where: { id, createdBy: userId } });
     return { success: true };
   }
 
   async getSignedUrl(id: string, expiresInSeconds = 3600) {
     const doc = await this.findById(id);
+    if (!doc.url) throw new NotFoundException('Document has no file');
+
+    const filename = doc.url.split(`storage.googleapis.com/${envs.gcp.bucketName}/`)[1];
+    const signedUrl = await this.storageService.getSignedUrl(filename, expiresInSeconds);
+    return { url: signedUrl, expiresIn: expiresInSeconds };
+  }
+
+  async getCapacitacionDifusionSignedUrl(id: string, expiresInSeconds = 3600) {
+    const doc = await this.prisma.capacitacionDifusionDocument.findUnique({ where: { id } });
+    if (!doc) throw new NotFoundException('Document not found');
     if (!doc.url) throw new NotFoundException('Document has no file');
 
     const filename = doc.url.split(`storage.googleapis.com/${envs.gcp.bucketName}/`)[1];
