@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { User } from '@prisma/client';
+import { PermissionJobTitle, User } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { FilterDto, PaginationDto } from 'src/common/dtos/filter.dto';
 import { PrismaHelper } from 'src/common/helpers/prisma.helper';
@@ -48,6 +48,32 @@ export class UsersService {
 
     this.logger.log(`Users found: ${result.pagination.total}`);
     return result;
+  }
+
+  async findOptions(jobTitles?: string[]): Promise<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    rut: string;
+    permission: { jobTitle: PermissionJobTitle } | null;
+  }[]> {
+    const where = jobTitles?.length
+      ? { permission: { jobTitle: { in: jobTitles as PermissionJobTitle[] } } }
+      : {};
+
+    return this.prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        rut: true,
+        permission: { select: { jobTitle: true } },
+      },
+      orderBy: { firstName: 'asc' },
+    });
   }
 
   async findByEmail(email: string): Promise<User | null> {

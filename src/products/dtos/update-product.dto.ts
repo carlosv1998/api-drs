@@ -34,6 +34,13 @@ export class BaseProductUpdateData {
   stock?: number;
 }
 
+export class StockUpdateData {
+  @IsDefined()
+  @IsInt()
+  @Min(1)
+  cantidad: number;
+}
+
 export class UpdateProductDto {
   @IsEnum(PRODUCT_UPDATE_ACTION)
   action: PRODUCT_UPDATE_ACTION;
@@ -45,9 +52,12 @@ export class UpdateProductDto {
     switch (obj.action) {
       case PRODUCT_UPDATE_ACTION.BASE_UPDATE:
         return plainToInstance(BaseProductUpdateData, value);
+      case PRODUCT_UPDATE_ACTION.ADD_STOCK:
+      case PRODUCT_UPDATE_ACTION.SUBTRACT_STOCK:
+        return plainToInstance(StockUpdateData, value);
       default:
         return value;
     }
   })
-  data: BaseProductUpdateData;
+  data: BaseProductUpdateData | StockUpdateData;
 }

@@ -31,6 +31,14 @@ export class UsersController {
     return this.usersService.findAll({ page, pageSize }, filterDto);
   }
 
+  @Get('options')
+  findOptions(@Query('jobTitles') rawJobTitles?: string | string[]) {
+    const jobTitles = rawJobTitles
+      ? (Array.isArray(rawJobTitles) ? rawJobTitles : [rawJobTitles])
+      : undefined;
+    return this.usersService.findOptions(jobTitles);
+  }
+
   @Patch('me')
   updateMe(@GetUser('id') userId: string, @Body() data: UpdateUserDto) {
     this.logger.debug(`Received request to update profile for user ${userId}`);

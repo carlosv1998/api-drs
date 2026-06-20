@@ -1,10 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { FilterDto, PaginationDto } from 'src/common/dtos/filter.dto';
 import { PrismaHelper } from 'src/common/helpers/prisma.helper';
 import { IPaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
 import { CreateProductDto } from './dtos/create-product.dto';
-import { BaseProductUpdateData, UpdateProductDto } from './dtos/update-product.dto';
+import { BaseProductUpdateData, StockUpdateData, UpdateProductDto } from './dtos/update-product.dto';
 import { PRODUCT_UPDATE_ACTION } from './enums';
 
 @Injectable()
@@ -50,6 +50,10 @@ export class ProductsService {
     switch (dto.action) {
       case PRODUCT_UPDATE_ACTION.BASE_UPDATE:
         return this.handleBaseUpdate(id, dto.data as BaseProductUpdateData);
+      case PRODUCT_UPDATE_ACTION.ADD_STOCK:
+        return this.handleAddStock(id, dto.data as StockUpdateData);
+      case PRODUCT_UPDATE_ACTION.SUBTRACT_STOCK:
+        return this.handleSubtractStock(id, dto.data as StockUpdateData);
     }
   }
 
@@ -74,5 +78,27 @@ export class ProductsService {
 
     this.logger.log(`Product updated: ${id}`);
     return product;
+  }
+
+  private async handleAddStock(id: string, data: StockUpdateData) {
+    const product = await this.findById(id);
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: { stock: product.stock + data.cantidad },
+    });
+    this.logger.log(`Stock added for product ${id}: ${product.stock} -> ${updated.stock}`);
+    return updated;
+  }
+
+  private async handleSubtractStock(id: string, data: StockUpdateData) {
+    const product = await this.findById(id);
+    const newStock = product.stock - data.cantidad;
+    if (newStock < 0) throw new BadRequestException('Stock insuficiente para realizar la operación');
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: { stock: newStock },
+    });
+    this.logger.log(`Stock subtracted for product ${id}: ${product.stock} -> ${updated.stock}`);
+    return updated;
   }
 }
