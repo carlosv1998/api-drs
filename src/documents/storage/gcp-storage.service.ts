@@ -1,23 +1,30 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { join } from 'path';
 import { Storage } from '@google-cloud/storage';
-import { envs } from 'src/config/envs';
 import { IStorageService } from '../interfaces/storage.interface';
+import { envs } from 'src/config/envs';
 
 @Injectable()
 export class GcpStorageService implements IStorageService {
   private readonly logger = new Logger(GcpStorageService.name);
   private readonly storage: Storage;
+  private readonly signingStorage: Storage;
   private readonly bucketName: string;
 
   constructor() {
     this.bucketName = envs.gcp.bucketName;
-    this.storage = new Storage({
-      projectId: envs.gcp.projectId,
-      credentials: {
-        client_email: envs.gcp.clientEmail,
-        private_key: envs.gcp.privateKey,
-      },
-    });
+
+    if (process.env.GOOGLE_JSON_CREDENTIALS) {
+      const credentials = JSON.parse(process.env.GOOGLE_JSON_CREDENTIALS);
+      // ADC para uploads/deletes — usa metadata server de Cloud Run, sin llamadas a oauth2.googleapis.com
+      this.storage = new Storage({ projectId: credentials.project_id });
+      // Credenciales explícitas solo para signing — firma localmente con la private key, sin llamadas HTTP
+      this.signingStorage = new Storage({ credentials, projectId: credentials.project_id });
+    } else {
+      const keyFilename = join(process.cwd(), 'google-service-account.json');
+      this.storage = new Storage({ keyFilename });
+      this.signingStorage = new Storage({ keyFilename });
+    }
   }
 
   async upload(buffer: Buffer, filename: string, mimetype: string, bucketName?: string): Promise<string> {
@@ -33,7 +40,7 @@ export class GcpStorageService implements IStorageService {
   }
 
   async getSignedUrl(filename: string, expiresInSeconds: number): Promise<string> {
-    const [url] = await this.storage
+    const [url] = await this.signingStorage
       .bucket(this.bucketName)
       .file(filename)
       .getSignedUrl({

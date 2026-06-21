@@ -31,6 +31,8 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
 COPY --from=builder /app/dist ./dist
 
+COPY --from=builder /app/src/documents ./src/documents
+
 # Cloud Run injects PORT automatically (8080)
 EXPOSE 8080
 
