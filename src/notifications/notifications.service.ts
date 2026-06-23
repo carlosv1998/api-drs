@@ -65,7 +65,7 @@ export class NotificationsService {
     const notificationEvent = { type, title, body, route, payload };
     this.realtime.emitToUsers(userIds, 'notification', notificationEvent);
 
-    await this.sendExpoPush(userIds, { title, body, route, payload });
+    await this.sendExpoPush(userIds, { type, title, body, payload });
   }
 
   /** Send a persisted notification (DB + WebSocket + push) to all users with any of the given scopes. */
@@ -107,30 +107,77 @@ export class NotificationsService {
 
   private async sendExpoPush(
     userIds: string[],
-    data: { title: string; body: string; route?: string; payload?: Record<string, unknown> },
+    data: { type: string; title: string; body: string; payload?: Record<string, unknown> },
   ) {
     const tokens = await this.prisma.pushToken.findMany({
       where: { userId: { in: userIds } },
       select: { token: true },
     });
 
-    const messages: ExpoPushMessage[] = tokens
-      .filter((t) => Expo.isExpoPushToken(t.token))
-      .map((t) => ({
-        to: t.token,
-        sound: 'default' as const,
-        title: data.title,
-        body: data.body,
-        data: { route: data.route, ...(data.payload ?? {}) },
-      }));
+    const validTokens = tokens.filter((t) => Expo.isExpoPushToken(t.token));
+
+    const messages: ExpoPushMessage[] = validTokens.map((t) => ({
+      to: t.token,
+      sound: 'default' as const,
+      title: data.title,
+      body: data.body,
+      data: { type: data.type, ...(data.payload ?? {}) },
+    }));
 
     if (messages.length === 0) return;
 
     const chunks = this.expo.chunkPushNotifications(messages);
+    const allTickets: Awaited<ReturnType<Expo['sendPushNotificationsAsync']>> = [];
+
     for (const chunk of chunks) {
-      await this.expo.sendPushNotificationsAsync(chunk).catch((err) => {
-        this.logger.error('Expo push error', err);
+      const tickets = await this.expo.sendPushNotificationsAsync(chunk).catch((err) => {
+        this.logger.error('Expo push send error', err);
+        return [] as typeof allTickets;
       });
+      allTickets.push(...tickets);
+    }
+
+    await this.processReceipts(allTickets, validTokens.map((t) => t.token));
+  }
+
+  private async processReceipts(
+    tickets: Awaited<ReturnType<Expo['sendPushNotificationsAsync']>>,
+    tokens: string[],
+  ) {
+    const receiptIds: string[] = [];
+    const tokenByIndex = new Map<number, string>();
+
+    tickets.forEach((ticket, i) => {
+      if (ticket.status === 'ok' && ticket.id) {
+        receiptIds.push(ticket.id);
+        tokenByIndex.set(receiptIds.length - 1, tokens[i]);
+      } else if (ticket.status === 'error') {
+        this.logger.warn(`Push ticket error for token ${tokens[i]}: ${ticket.message}`);
+        if (ticket.details?.error === 'DeviceNotRegistered') {
+          this.removePushToken(tokens[i]).catch(() => null);
+        }
+      }
+    });
+
+    if (receiptIds.length === 0) return;
+
+    const receiptChunks = this.expo.chunkPushNotificationReceiptIds(receiptIds);
+    for (const chunk of receiptChunks) {
+      const receipts = await this.expo.getPushNotificationReceiptsAsync(chunk).catch((err) => {
+        this.logger.error('Expo receipt fetch error', err);
+        return {} as Awaited<ReturnType<Expo['getPushNotificationReceiptsAsync']>>;
+      });
+
+      for (const [receiptId, receipt] of Object.entries(receipts)) {
+        if (receipt.status === 'error') {
+          this.logger.warn(`Push receipt error ${receiptId}: ${receipt.message}`);
+          if (receipt.details?.error === 'DeviceNotRegistered') {
+            const idx = receiptIds.indexOf(receiptId);
+            const token = tokenByIndex.get(idx);
+            if (token) this.removePushToken(token).catch(() => null);
+          }
+        }
+      }
     }
   }
 }

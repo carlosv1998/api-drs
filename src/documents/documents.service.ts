@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -212,7 +213,6 @@ export class DocumentsService {
       type: NotificationType.FIRMA_DOCUMENTO,
       title: 'Nuevo documento para firmar',
       body: `${relatorData.nombre} ha registrado una capacitación que requiere tu firma.`,
-      route: `/documentos/capacitacion/${updatedDocument.id}`,
       payload: { documentId: updatedDocument.id },
     });
 

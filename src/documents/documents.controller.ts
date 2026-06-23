@@ -14,6 +14,7 @@ import { RequirePermissions } from 'src/permissions/decorators/require-permissio
 import { SCOPE_NAME } from 'src/common/enums/scopes.enum';
 import { PaginatedQueryDto, PaginationDto } from 'src/common/dtos/filter.dto';
 import { CreateCapacitacionDifusionDataDto } from './dtos/capacitacion-difusion-data.dto';
+import { Public } from 'src/main/decorators/public.decorator';
 
 @Controller('documents')
 export class DocumentsController {
