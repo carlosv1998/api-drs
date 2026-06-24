@@ -110,7 +110,16 @@ export class UsersService {
 
   async uploadAvatar(userId: string, file: Express.Multer.File): Promise<User> {
     const ext = file.mimetype.split('/')[1] ?? 'jpg';
-    const filename = `profiles/images/${userId}.${ext}`;
+    const filename = `profiles/images/${userId}_${Date.now()}.${ext}`;
+
+    const currentUser = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (currentUser?.avatarUrl) {
+      const oldFilename = currentUser.avatarUrl.split(`storage.googleapis.com/${envs.gcp.publicBucketName}/`)[1];
+      if (oldFilename) {
+        await this.storageService.delete(oldFilename, envs.gcp.publicBucketName).catch(() => {});
+      }
+    }
+
     const url = await this.storageService.upload(file.buffer, filename, file.mimetype, envs.gcp.publicBucketName);
 
     const user = await this.prisma.user.update({
@@ -137,7 +146,16 @@ export class UsersService {
 
   async uploadSignature(userId: string, file: Express.Multer.File): Promise<User> {
     const ext = file.mimetype.split('/')[1] ?? 'png';
-    const filename = `signatures/${userId}.${ext}`;
+    const filename = `signatures/${userId}_${Date.now()}.${ext}`;
+
+    const currentUser = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (currentUser?.signatureUrl) {
+      const oldFilename = currentUser.signatureUrl.split(`storage.googleapis.com/${envs.gcp.publicBucketName}/`)[1];
+      if (oldFilename) {
+        await this.storageService.delete(oldFilename, envs.gcp.publicBucketName).catch(() => {});
+      }
+    }
+
     const url = await this.storageService.upload(file.buffer, filename, file.mimetype, envs.gcp.publicBucketName);
 
     const user = await this.prisma.user.update({ where: { id: userId }, data: { signatureUrl: url } });
