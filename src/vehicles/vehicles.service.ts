@@ -5,21 +5,23 @@ import { PrismaHelper } from 'src/common/helpers/prisma.helper';
 import { IPaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
 import { CustomBadRequestException } from 'src/common/exceptions/custom-exceptions';
 import { CreateVehicleDto } from './dtos/create-vehicle.dto';
-import {
-  AddMaintenanceData,
-  BaseVehicleUpdateData,
-  DeleteMaintenanceData,
-  UpdateMaintenanceData,
-  UpdateVehicleDto,
-} from './dtos/update-vehicle.dto';
-import { VEHICLE_UPDATE_ACTION } from './enums';
+import { UpdateVehicleBaseBodyDto } from './dtos/update-vehicle-base-body.dto';
+import { AddMaintenanceBodyDto } from './dtos/add-maintenance-body.dto';
+import { UpdateMaintenanceBodyDto } from './dtos/update-maintenance-body.dto';
 import { VEHICLE_ERRORS } from './errors';
+import { GcpStorageService } from 'src/documents/storage/gcp-storage.service';
+import { envs } from 'src/config/envs';
 
 const VEHICLE_INCLUDE = {
   maintenances: {
     orderBy: { performedAt: 'desc' as const },
     include: {
-      createdBy: { select: { firstName: true, lastName: true } },
+      createdBy: {
+        select: {
+          firstName: true, lastName: true, avatarUrl: true, email: true,
+          permission: { select: { jobTitle: true } },
+        },
+      },
     },
   },
 };
@@ -28,7 +30,10 @@ const VEHICLE_INCLUDE = {
 export class VehiclesService {
   private readonly logger = new Logger(VehiclesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storageService: GcpStorageService,
+  ) {}
 
   async findAll(
     paginationDto: PaginationDto,
@@ -55,24 +60,27 @@ export class VehiclesService {
       include: VEHICLE_INCLUDE,
     });
 
-    if (!vehicle) {
-      throw new NotFoundException(`Vehicle ${id} not found`);
-    }
-
+    if (!vehicle) throw new NotFoundException(`Vehicle ${id} not found`);
     return vehicle;
   }
 
-  async create(dto: CreateVehicleDto) {
-    const existing = await this.prisma.vehicle.findUnique({
-      where: { patent: dto.patent },
-    });
+  async create(dto: CreateVehicleDto, files: Express.Multer.File[] = []) {
+    const existing = await this.prisma.vehicle.findUnique({ where: { patent: dto.patent } });
 
     if (existing) {
-      throw new CustomBadRequestException(
-        'Patent already in use',
-        VEHICLE_ERRORS.PATENT_ALREADY_IN_USE,
-      );
+      throw new CustomBadRequestException('Patent already in use', VEHICLE_ERRORS.PATENT_ALREADY_IN_USE);
     }
+
+    const imageUrls = await Promise.all(
+      files.map((file) =>
+        this.storageService.upload(
+          file.buffer,
+          this.buildVehicleImageFilename(dto.patent, file.mimetype),
+          file.mimetype,
+          envs.gcp.publicBucketName,
+        ),
+      ),
+    );
 
     const vehicle = await this.prisma.vehicle.create({
       data: {
@@ -81,6 +89,7 @@ export class VehiclesService {
         mileage: dto.mileage ?? 0,
         nextMaintenance: dto.nextMaintenance ? new Date(dto.nextMaintenance) : null,
         maintainMileageInterval: dto.maintainMileageInterval ?? null,
+        imageUrls,
       },
       include: VEHICLE_INCLUDE,
     });
@@ -89,120 +98,208 @@ export class VehiclesService {
     return vehicle;
   }
 
-  async update(id: string, userId: string, dto: UpdateVehicleDto) {
-    switch (dto.action) {
-      case VEHICLE_UPDATE_ACTION.BASE_UPDATE:
-        return this.handleBaseUpdate(id, userId, dto);
-      case VEHICLE_UPDATE_ACTION.ADD_MAINTENANCE:
-        return this.handleAddMaintenance(id, userId, dto);
-      case VEHICLE_UPDATE_ACTION.UPDATE_MAINTENANCE:
-        return this.handleUpdateMaintenance(id, dto);
-      case VEHICLE_UPDATE_ACTION.DELETE_MAINTENANCE:
-        return this.handleDeleteMaintenance(id, dto);
+  async updateBase(
+    id: string,
+    userId: string,
+    dto: UpdateVehicleBaseBodyDto,
+    files: Express.Multer.File[],
+  ) {
+    const vehicle = await this.findById(id);
+
+    let imageUrls = vehicle.imageUrls;
+    if (dto.imageUrls !== undefined || files.length > 0) {
+      const keepUrls = dto.imageUrls ?? vehicle.imageUrls;
+      const removedUrls = vehicle.imageUrls.filter((url) => !keepUrls.includes(url));
+      await this.deleteGcpImages(removedUrls);
+
+      const uploadedUrls = await Promise.all(
+        files.map((file) =>
+          this.storageService.upload(
+            file.buffer,
+            this.buildVehicleImageFilename(vehicle.patent, file.mimetype),
+            file.mimetype,
+            envs.gcp.publicBucketName,
+          ),
+        ),
+      );
+
+      imageUrls = [...keepUrls, ...uploadedUrls];
     }
-  }
 
-  async remove(id: string) {
-    await this.findById(id);
-    const vehicle = await this.prisma.vehicle.delete({ where: { id } });
-    this.logger.log(`Vehicle deleted: ${id}`);
-    return vehicle;
-  }
-
-  // ─── private action handlers ──────────────────────────────────────────────
-
-  private async handleBaseUpdate(id: string, userId: string, dto: UpdateVehicleDto) {
-    const data = dto.data as BaseVehicleUpdateData;
-    await this.findById(id);
-
-    const vehicle = await this.prisma.vehicle.update({
+    const updated = await this.prisma.vehicle.update({
       where: { id },
       data: {
-        ...(data.type !== undefined && { type: data.type }),
-        ...(data.mileage !== undefined && { mileage: data.mileage }),
-        ...(data.nextMaintenance !== undefined && {
-          nextMaintenance: data.nextMaintenance ? new Date(data.nextMaintenance) : null,
+        ...(dto.type !== undefined && { type: dto.type }),
+        ...(dto.mileage !== undefined && { mileage: dto.mileage }),
+        ...(dto.nextMaintenance !== undefined && {
+          nextMaintenance: new Date(dto.nextMaintenance),
         }),
-        ...(data.maintainMileageInterval !== undefined && {
-          maintainMileageInterval: data.maintainMileageInterval,
+        ...(dto.maintainMileageInterval !== undefined && {
+          maintainMileageInterval: dto.maintainMileageInterval,
         }),
+        imageUrls,
         updatedById: userId,
         lastUpdate: new Date(),
       },
       include: VEHICLE_INCLUDE,
     });
 
-    this.logger.log(`Vehicle base-update: ${id}`);
-    return vehicle;
+    this.logger.log(`Vehicle updated: ${id}`);
+    return updated;
   }
 
-  private async handleAddMaintenance(id: string, userId: string, dto: UpdateVehicleDto) {
-    const data = dto.data as AddMaintenanceData;
+  async remove(id: string) {
     const vehicle = await this.findById(id);
+
+    const allImageUrls = [
+      ...vehicle.imageUrls,
+      ...vehicle.maintenances.flatMap((m) => m.imageUrls),
+    ];
+    await this.deleteGcpImages(allImageUrls);
+
+    await this.prisma.vehicleMaintenance.deleteMany({ where: { vehicleId: id } });
+    await this.prisma.vehicle.delete({ where: { id } });
+
+    this.logger.log(`Vehicle deleted: ${id} (${allImageUrls.length} images removed)`);
+  }
+
+  async addMaintenance(
+    vehicleId: string,
+    userId: string,
+    dto: AddMaintenanceBodyDto,
+    files: Express.Multer.File[],
+  ) {
+    const vehicle = await this.findById(vehicleId);
+
+    if (dto.mileageAtService < vehicle.mileage) {
+      throw new CustomBadRequestException(
+        'Mileage below vehicle current mileage',
+        VEHICLE_ERRORS.MILEAGE_BELOW_VEHICLE,
+      );
+    }
+
+    const imageUrls = await Promise.all(
+      files.map((file) =>
+        this.storageService.upload(
+          file.buffer,
+          this.buildMaintenanceFilename(vehicle.patent, dto.performedAt, file.mimetype),
+          file.mimetype,
+          envs.gcp.publicBucketName,
+        ),
+      ),
+    );
 
     await this.prisma.vehicleMaintenance.create({
       data: {
-        vehicleId: id,
-        performedAt: new Date(data.performedAt),
-        mileageAtService: data.mileageAtService,
-        nextMaintenanceMileage: vehicle.maintainMileageInterval
-          ? data.mileageAtService + vehicle.maintainMileageInterval
-          : null,
-        notes: data.notes ?? null,
+        vehicleId,
+        performedAt: new Date(dto.performedAt),
+        mileageAtService: dto.mileageAtService,
+        notes: dto.notes ?? null,
+        imageUrls,
         createdById: userId,
       },
     });
 
-    this.logger.log(`Maintenance added to vehicle: ${id}`);
-    return this.findById(id);
+    this.logger.log(`Maintenance added to vehicle ${vehicleId} with ${imageUrls.length} images`);
+    return this.findById(vehicleId);
   }
 
-  private async handleUpdateMaintenance(id: string, dto: UpdateVehicleDto) {
-    const data = dto.data as UpdateMaintenanceData;
-
+  async updateMaintenanceFull(
+    vehicleId: string,
+    maintenanceId: string,
+    dto: UpdateMaintenanceBodyDto,
+    files: Express.Multer.File[],
+  ) {
     const maintenance = await this.prisma.vehicleMaintenance.findFirst({
-      where: { id: data.maintenanceId, vehicleId: id },
+      where: { id: maintenanceId, vehicleId },
     });
 
     if (!maintenance) {
-      throw new NotFoundException(`Maintenance record ${data.maintenanceId} not found`);
+      throw new NotFoundException(`Maintenance record ${maintenanceId} not found`);
     }
 
-    const vehicle = await this.findById(id);
-    const newMileageAtService = data.mileageAtService ?? maintenance.mileageAtService;
+    const vehicle = await this.findById(vehicleId);
+    const newMileage = dto.mileageAtService ?? maintenance.mileageAtService;
+
+    if (dto.mileageAtService !== undefined && dto.mileageAtService < vehicle.mileage) {
+      throw new CustomBadRequestException(
+        'Mileage below vehicle current mileage',
+        VEHICLE_ERRORS.MILEAGE_BELOW_VEHICLE,
+      );
+    }
+
+    const removedUrls = maintenance.imageUrls.filter(
+      (url) => !(dto.imageUrls ?? []).includes(url),
+    );
+    await this.deleteGcpImages(removedUrls);
+
+    const uploadedUrls = await Promise.all(
+      files.map((file) =>
+        this.storageService.upload(
+          file.buffer,
+          this.buildMaintenanceFilename(vehicle.patent, dto.performedAt ?? maintenance.performedAt, file.mimetype),
+          file.mimetype,
+          envs.gcp.publicBucketName,
+        ),
+      ),
+    );
+
+    const imageUrls = [...(dto.imageUrls ?? []), ...uploadedUrls];
 
     await this.prisma.vehicleMaintenance.update({
-      where: { id: data.maintenanceId },
+      where: { id: maintenanceId },
       data: {
-        ...(data.performedAt !== undefined && { performedAt: new Date(data.performedAt) }),
-        ...(data.mileageAtService !== undefined && {
-          mileageAtService: data.mileageAtService,
-          nextMaintenanceMileage: vehicle.maintainMileageInterval
-            ? newMileageAtService + vehicle.maintainMileageInterval
-            : null,
+        ...(dto.performedAt !== undefined && { performedAt: new Date(dto.performedAt) }),
+        ...(dto.mileageAtService !== undefined && {
+          mileageAtService: dto.mileageAtService,
         }),
-        ...(data.notes !== undefined && { notes: data.notes || null }),
+        ...(dto.notes !== undefined && { notes: dto.notes || null }),
+        imageUrls,
       },
     });
 
-    this.logger.log(`Maintenance updated: ${data.maintenanceId}`);
-    return this.findById(id);
+    this.logger.log(`Maintenance ${maintenanceId} updated with ${imageUrls.length} images`);
+    return this.findById(vehicleId);
   }
 
-  private async handleDeleteMaintenance(id: string, dto: UpdateVehicleDto) {
-    const data = dto.data as DeleteMaintenanceData;
-
+  async deleteMaintenance(vehicleId: string, maintenanceId: string) {
     const maintenance = await this.prisma.vehicleMaintenance.findFirst({
-      where: { id: data.maintenanceId, vehicleId: id },
+      where: { id: maintenanceId, vehicleId },
     });
 
     if (!maintenance) {
-      throw new NotFoundException(`Maintenance record ${data.maintenanceId} not found`);
+      throw new NotFoundException(`Maintenance record ${maintenanceId} not found`);
     }
 
-    await this.prisma.vehicleMaintenance.delete({ where: { id: data.maintenanceId } });
+    await this.deleteGcpImages(maintenance.imageUrls);
+    await this.prisma.vehicleMaintenance.delete({ where: { id: maintenanceId } });
 
-    this.logger.log(`Maintenance deleted: ${data.maintenanceId}`);
-    return this.findById(id);
+    this.logger.log(`Maintenance deleted: ${maintenanceId}`);
+    return this.findById(vehicleId);
+  }
+
+  // ─── private helpers ──────────────────────────────────────────────────────
+
+  private async deleteGcpImages(urls: string[]): Promise<void> {
+    if (!urls.length) return;
+    const baseUrl = `https://storage.googleapis.com/${envs.gcp.publicBucketName}/`;
+    await Promise.all(
+      urls.map((url) =>
+        this.storageService.delete(url.replace(baseUrl, ''), envs.gcp.publicBucketName),
+      ),
+    );
+  }
+
+  private buildMaintenanceFilename(patent: string, performedAt: string | Date, mimetype: string): string {
+    const ext = mimetype.split('/')[1] ?? 'jpg';
+    const date = new Date(performedAt).toISOString().slice(0, 10);
+    const unique = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    return `vehicles/${patent}/maintenances/${date}/${unique}.${ext}`;
+  }
+
+  private buildVehicleImageFilename(patent: string, mimetype: string): string {
+    const ext = mimetype.split('/')[1] ?? 'jpg';
+    const unique = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    return `vehicles/${patent}/images/${unique}.${ext}`;
   }
 }

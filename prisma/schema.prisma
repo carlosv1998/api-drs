@@ -255,6 +255,7 @@ model Vehicle {
   mileage                 Int                  @default(0)
   maintainMileageInterval Int?
   nextMaintenance         DateTime?
+  imageUrls               String[]
   lastUpdate              DateTime?            @default(now())
   updatedById             String?              @db.ObjectId
   createdAt               DateTime             @default(now())
@@ -270,8 +271,8 @@ model VehicleMaintenance {
   vehicle                Vehicle  @relation(fields: [vehicleId], references: [id])
   performedAt            DateTime
   mileageAtService       Int
-  nextMaintenanceMileage Int?
   notes                  String?
+  imageUrls              String[]
   createdById            String   @db.ObjectId
   createdBy              User     @relation(fields: [createdById], references: [id])
   createdAt              DateTime @default(now())
